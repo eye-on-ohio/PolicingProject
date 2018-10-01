@@ -12,7 +12,7 @@ Volcano_Eruptive_Volume <- c(1000, 100000000, 1000000000)
 Volcano_Frequency_in_years <- c(1, 1.5, 10)
 Volcano_name = c("Kilauea","Eyjafjallajökull","Mount St. Helens" )
 
-##creating Data Frome
+##creating Data Frame
 
 Volcanoes <- data.frame(Volcano_Eruptive_Volume,Volcano_Frequency_in_years, Volcano_name)
 library(ggplot2)
