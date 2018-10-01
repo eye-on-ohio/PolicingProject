@@ -1,0 +1,41 @@
+---
+title: "R_Markdown_Module_5"
+author: "Lucia Walinchus"
+date: "9/30/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#Volcanoes package
+
+Volcano_Eruptive_Volume <- c(1000, 100000000, 1000000000)
+Volcano_Frequency_in_years <- c(1, 1.5, 10)
+Volcano_name = c("Kilauea","Eyjafjallajökull","Mount St. Helens" )
+
+##creating Data Frome
+
+Volcanoes <- data.frame(Volcano_Eruptive_Volume,Volcano_Frequency_in_years, Volcano_name)
+library(ggplot2)
+ggplot(data=Volcanoes)+
+  geom_point(mapping=aes(x=Volcano_Eruptive_Volume, y=Volcano_Frequency_in_years, color=Volcano_name))
+
+
+```
+
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+```{r}
+library(ggplot2)
+ggplot(data=Volcanoes)+
+  geom_point(mapping=aes(x=Volcano_Eruptive_Volume, y=Volcano_Frequency_in_years, color=Volcano_name))
+
+```
+
