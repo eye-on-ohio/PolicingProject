@@ -27,7 +27,7 @@ library(mlr3spatial)
 
 ## Land bank follow up
 
-The land bank is a great program, but it's a very limited program. 
+The land bank is a great program, but it's a very limited program. How do officials decide which properties to remediate? 
 
 
 This is similar to the analysis we did for this story[on Land Banks.](https://eyeonohio.com/how-do-public-officials-make-land-bank-decisions-artificial-intelligence-may-seek-patterns/)
@@ -41,6 +41,16 @@ We are looking first at Lawrence County, where we found our most egregious tip.
 First, figuring out which properties are land bank properties. 
 
 We got this from a FOIA. 
+Also there were several that had no date that we had to follow up on. 
+
+As per the county auditor via email: 
+*06-100-0700.000   $0.00 balance, paid 4/12/22
+*14-068-0500.000   Certified Delinquent 2021 pay 2022
+*18-001-1270.000   Certified Delinquent 2021 pay 2022
+*18-001-1717.000   Certified Delinquent 2021 pay 2022
+*18-045-0700.000   $0.00 balance, paid 3/11/22
+*34-003-1600.000   Certified Delinquent 2021 pay 2022
+*36-120-1200.000   $0.00 balance, paid 7/14/22
 
 
 ```{r} 
@@ -65,7 +75,20 @@ Lawrence_LB_All <- Lawrence_LB_All %>%
 
 ```
 
-So obviously the mlr and mlr3 packages conflict. But for whatever reason even loading the mlr package makes it so that the mlr3 package will _never_work, even if you detach the package and dependencies. Ugh. So here is the second part, using mlr3, which has the spatial machine learning algorithms which work much better on mapping data like we have. 
+
+Bringing in the delinquent data
+
+
+```{r}
+setwd("~/Code/Housing_Equity_3/")
+
+Lawrence_Land_data <- rio::import("lawrenceoh/DETINFO.txt") #from a FOIA, data about values and when taxes were paid. 
+
+
+Lawrence_Delinquents_All <- rio::import("Lawrence Current delinquent parcels.xlsx") #From the county website
+
+```
+So the mlr and mlr3 packages conflict. But for whatever reason even loading the mlr package makes it so that the mlr3 package will _never_work, even if you detach the package and dependencies. Ugh. So here is the second part, using mlr3, which has the spatial machine learning algorithms which work much better on mapping data like we have. 
 
 How often do parcels get foreclosed or go to the Land bank?
 
@@ -99,7 +122,7 @@ This comes ith with no CRS so we have to add it in.
 ```
 
 
-et's take a look at where all those properties are. 
+Let's take a look at where all those properties are. 
 
 ```{r}
 Lawrence_LB_Geo <- Lawrence_Geo %>% 
@@ -173,18 +196,7 @@ Lawrence_Properties_plotted_with_delinquents
 
 
 
-Bringing in the delinquent data
 
-
-```{r}
-setwd("~/Code/Housing_Equity_3/")
-
-Lawrence_Land_data <- rio::import("lawrenceoh/DETINFO.txt") #from a FOIA
-
-
-Lawrence_Delinquents_All <- rio::import("Lawrence Current delinquent parcels.xlsx") #From the county website
-
-```
 
 
 
@@ -207,7 +219,7 @@ The land bank data does not overlap with the delinquent data.
 setwd("~/Code/Housing_Equity_3")
 
 
-Lawrence_LB_with_Tax <- rio::import("~/Code/Housing_Equity_3/Lawrence Land Bank Property Values - Sheet1.csv")
+Lawrence_LB_with_Tax <- rio::import("~/Code/Housing_Equity_3/Lawrence Land Bank Property Values - Sheet1.csv") #this had to be compiled by going to the office
 
 Lawrence_data <- Lawrence_Geo %>% 
   filter(PARCEL %in% Lawrence_LB_with_Tax$PropertyID | PARCEL %in% Lawrence_Delinquents_All$`Parcel Number`) %>% 
@@ -317,6 +329,12 @@ ggplot(Lawrence_data, aes(x=years_delinquent))+
   geom_bar()+
   stat_bin(binwidth=1, geom="text", aes(label=..count..), vjust=-2.5) 
 ```
+When did most sales take place? 
+
+```{r}
+ggplot(Lawrence_LB_sold, aes(x=year(SaleDate)))+
+  geom_bar()
+```
 
 
 
@@ -399,9 +417,9 @@ data_sf <- data_sf %>%
 data_sf <- separate(data_sf, Centroid_Coordinates, c("x","y"), sep = ",", remove = TRUE)
 
 
-data_sf <- data_sf %>% 
+data_sf <- data_sf %>% #putting data into a format that the program needs in the next step
   mutate(x=str_remove(x,"^..")) %>% 
-  mutate(y=str_remove(y,".$"))
+  mutate(y=str_remove(y,".$")) 
 
 
 data_sf$ACRES <- as.numeric(data_sf$ACRES)
@@ -456,6 +474,8 @@ mlr3extralearners::install_learners("classif.randomForest")
 
 ```{r}
 
+library(mlr3extralearners)
+
 learner = lrn("classif.randomForest", predict_type = "prob")
 resampling_sp = rsmp("repeated_spcv_coords", folds = 4, repeats = 2)
 rr_sp = mlr3::resample(
@@ -480,7 +500,7 @@ print(str(splits))
 pred = learner$train(task, splits$train)$predict(task, splits$test)
 pred$confusion
 ```
-Looking good. For reference: 
+For reference: 
 
 *The upper left quadrant-the number of times our model predicted the positive class and was correct about it. 
 *the lower right quadrant- the number of times our model predicted the negative class and was also correct about it. (Together, the elements on the diagonal are called True Positives  and True Negatives . 
@@ -523,7 +543,7 @@ instance = fselect(
 
 
 
-#Still working on this part
+#Visualizing this
 
 Load required packages
 install.packages("devtools")
@@ -567,12 +587,23 @@ plot(filter(pred, Land_Bank==1))
 ```
 Note that is is not individual properties, but areas where the computer predicts a property will end up in the land bank.
 
-#Looking for properties close to our data that might sawy the data
 
 
-We are going to create a dataset of properties that are close to key officials.
 
-Here we are looking at the Gillispies, the people alleged to have taken the property, two people who bought a lot of land bank properties, and the land bank itself
+
+
+
+
+
+#Looking for properties close to our data that might Sway the data
+
+These models are great, but in the end we are looking for what factors influence the data. Here our model often picks no as that's usually the answer (because of the class imbalance) and we are getting a lot of false negatives, proportionally. We want a high degree of accuracy but 
+
+
+
+
+
+We are going to create a dataset of properties that are close to the river and another that is close to key officials, and see how that alters the model. 
 
 ```{r}
 
@@ -583,18 +614,12 @@ Lawrence_River <- Lawrence_Geo %>%
 
 plot(Lawrence_River)
 
-Lawyrence_key <- Lawrence_River
+Lawrence_key <- Lawrence_River
 
 ```
 
 
-```{r}
 
-Lawrence_key <- Lawrence_Geo %>% 
-  filter(str_detect(OWNER,"GILLISPIE"))  #|str_detect("LAMBIOTTE")|("FINLEY"))  #Mike Finley
-
-
-```
 
 
 How close are they to our properties?
@@ -669,6 +694,9 @@ Lawrence_data <- left_join(Lawrence_data, Lawrence_Distance_Info1, by="PARCEL")
 Looking at the feature importance and model accuracy by adding in distance to key properties.
 
 ```{r}
+
+#Addind in distance 
+
 Lawrence_Spatial_ML <- Lawrence_data %>% 
   dplyr::select(-PARCEL, -OWNER, -ADDRESS, -Certified_Delinquent_Year) %>% 
   mutate(Centroid_Coordinates=st_centroid(geometry)) 
@@ -698,8 +726,33 @@ data_sf$Distance_To_River_In_Meters <- as.numeric(data_sf$Distance_To_River_In_M
 
 data_sf <- data_sf %>% 
   filter(amount_owed>0) %>% 
-  filter(years_delinquent>0)
+  filter(years_delinquent>2) #Correcting for covid: taking out years delinquent that's less than 2: 
 
+
+
+
+
+
+
+#downsampling 
+
+stack_recipe <- recipe(Land_Bank~ ., data = data_sf) %>% 
+    step_downsample(Land_Bank)
+
+stack_prep <- prep(stack_recipe)
+
+stack_down <- bake(stack_prep, new_data = NULL)
+
+stack_down %>%
+    count(Land_Bank)
+
+
+```
+
+
+```{r}
+
+data_sf <- stack_down #using downsampled data
 # create `TaskClassifST` from `sf` object
 
 
@@ -719,8 +772,12 @@ rr_sp = mlr3::resample(
 
 rr_sp$aggregate(measures = msr("classif.ce"))
 rr_sp$aggregate(measures = msr("classif.acc"))
+```
 
 
+
+
+```{r}
 #Get a confusion matrix of a split. 
 
 # split into training and test
@@ -729,6 +786,258 @@ print(str(splits))
 pred = learner$train(task, splits$train)$predict(task, splits$test)
 pred$confusion
 
+```
+
+
+
+
+#Feature importance
+```{r}
+instance = fselect(
+  method = "random_search",
+  task =  task,
+  learner = learner,
+  resampling = rsmp("holdout"),
+  measure = msr("classif.ce"),
+  term_evals = 10,
+  batch_size = 5
+)
+```
+looking at phi based on this code: https://mlr3book.mlr-org.com/interpretation.html
+```{r}
+library(iml)
+
+
+Lawrence_data_no_geometry <- data_sf %>% 
+  st_drop_geometry() 
+  
+
+x = data_sf[which(names(data_sf) != "Land_Bank")]
+model = Predictor$new(learner, data = Lawrence_data_no_geometry, y = "Land_Bank")
+x.interest = data.frame(Lawrence_data_no_geometry[1, ])
+shapley = Shapley$new(model, x.interest = x.interest)
+plot(shapley)
+
+
+```
+
+#Looking at the decision tree 
+
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+binary.model <- rpart(learner$model, data = data_sf)
+rpart.plot(binary.model, cex=1, digits = 4)
+
+
+```
+
+How can we articulate this? 
+
+```{r}
+rpart.rules(binary.model)
+```
+
+
+
+#Looking at proximity to key places
+
+Does proximity to the main residence of Ed Gillispie, Mike Finley, or Thomas Lambiotte make a difference?
+
+
+```{r}
+
+Lawrence_key <- Lawrence_Geo %>% 
+  #filter(str_detect(OWNER,"GILLISPIE|LAMBIOTTE|FINLEY"))  
+  filter(PARCEL=="18-010-0500.008"|PARCEL=="23-105-1800.032"|PARCEL=="06-100-0300.000")
+
+
+#Getting Lawrence Data again
+
+setwd("~/Code/Housing_Equity_3")
+
+
+Lawrence_LB_with_Tax <- rio::import("~/Code/Housing_Equity_3/Lawrence Land Bank Property Values - Sheet1.csv")
+
+Lawrence_data <- Lawrence_Geo %>% 
+  filter(PARCEL %in% Lawrence_LB_with_Tax$PropertyID | PARCEL %in% Lawrence_Delinquents_All$`Parcel Number`) %>% 
+  dplyr::select(-COMPNUM) %>% 
+  #select(mpropertyNumber, TotValue, priorDelqOwedTot, propertyLand, ImprLand, CertDelqYear) %>%
+  mutate(Land_Bank=if_else(PARCEL %in% Lawrence_LB_with_Tax$PropertyID,1,0)) %>% 
+  mutate(amount_owed=if_else(PARCEL %in% Lawrence_LB_with_Tax$PropertyID,Lawrence_LB_with_Tax$Amount[match(PARCEL, Lawrence_LB_with_Tax$PropertyID)],as.character(Lawrence_Delinquents_All$Amount[match(PARCEL, Lawrence_Delinquents_All$`Parcel Number`)]))) %>%
+  mutate(Certified_Delinquent_Year=if_else(PARCEL %in% Lawrence_LB_with_Tax$PropertyID,Lawrence_LB_with_Tax$Year_Certified_Delinquent[match(PARCEL, Lawrence_LB_with_Tax$PropertyID)], as.integer(Lawrence_Delinquents_All$`Certified Year`[match(PARCEL, Lawrence_Delinquents_All$`Parcel Number`)]))) %>% 
+  mutate(years_delinquent=if_else(PARCEL %in% Lawrence_LB_with_Tax$PropertyID,Lawrence_LB_with_Tax$Years_On_Delinquent_Tax_Roll_Before_LB_Transfer[match(PARCEL, Lawrence_LB_with_Tax$PropertyID)],2022-Certified_Delinquent_Year)) 
+
+
+Lawrence_data$amount_owed <- as.double(Lawrence_data$amount_owed)
+
+```
+
+
+
+
+
+How close are they to our properties?
+
+```{r }
+library(lwgeom)
+
+sf::sf_use_s2(FALSE)
+
+Lawrence_key <- st_transform(Lawrence_key, crs= 4326)
+
+Lawrence_key <- st_as_sf(Lawrence_key)
+
+Lawrence_LB_Geo <- Lawrence_LB_Geo %>% distinct(PARCEL, .keep_all = TRUE)
+
+Lawrence_data <- st_transform(Lawrence_data, crs= 4326)
+
+Lawrence_data <- st_as_sf(Lawrence_data)
+
+Lawrence_data <- Lawrence_data %>% distinct(PARCEL, .keep_all = TRUE)
+
+
+Lawrence_Distance_Matrix <- as.data.frame(st_distance(  Lawrence_key$geometry, Lawrence_data$geometry)) #This takes quite a while just FYI
+
+
+
+  #Sets column names
+  
+Lawrence_Distance_Matrix1 <- Lawrence_Distance_Matrix %>% 
+  `colnames<-`(Lawrence_data$PARCEL ) # %>% 
+  
+  #Adds a column containing names so that each row now also has a name
+  #cbind(name = Lawrence_key$COMPNUM  ) #This actually doesn't help as they are all called "key"
+#Lawrence_Distance_Matrix1 is the same as Lawrence_Distance_Matrix but with the parcel number down the side  and column names on top so we don't get confused. But obviously that is just a label and not actually part of the calculations (aka a bad data practice) which is why we keep Lawrence Distance Matrix as well.
+
+```
+
+
+
+Removing the units 
+
+```{r}
+library(units)
+Lawrence_Distance_Matrix_No_Units <- drop_units(Lawrence_Distance_Matrix1)
+```
+Now we need to see if each parcel is close to the river. This distance matrix gives us the distance between each parcel and the river. We don't care about how many river parcels are close; we just want to know how close each parcel is to the closet part of the river. 
+
+
+
+Finding the smallest distance 
+
+```{r}
+Lawrence_Smallest_Distance <- Lawrence_Distance_Matrix_No_Units %>%                                                                                  
+  dplyr::summarise_all(~min(.))
+```
+
+
+```{r}
+Lawrence_Distance_Info1 <-Lawrence_Smallest_Distance %>% 
+  pivot_longer("18-205-0900.000":"12-076-1600.022", names_to = "PARCEL", values_to = "Distance_To_Key_Properties" )
+```
+
+
+Adding them together
+
+```{r}
+Lawrence_data <- left_join(Lawrence_data, Lawrence_Distance_Info1, by="PARCEL")
+```
+
+#Does being closer to those make a difference?
+
+Looking at the feature importance and model accuracy by adding in distance to key properties.
+
+```{r}
+
+#recreating data_sf
+
+Lawrence_Spatial_ML <- Lawrence_data %>% 
+  dplyr::select(-PARCEL, -OWNER, -ADDRESS, -Certified_Delinquent_Year) %>% 
+  mutate(Centroid_Coordinates=st_centroid(geometry)) 
+
+
+data_sf <- as_tibble(cbind(Lawrence_Spatial_ML$Centroid_Coordinates, Lawrence_Spatial_ML$ACRES, Lawrence_Spatial_ML$Land_Bank, Lawrence_Spatial_ML$amount_owed, Lawrence_Spatial_ML$years_delinquent, Lawrence_Spatial_ML$Distance_To_Key_Properties)) 
+
+data_sf <- data_sf %>% 
+  rename(Centroid_Coordinates=V1, ACRES=V2,Land_Bank=V3, amount_owed=V4, years_delinquent=V5, Distance_To_Key_Properties=V6)
+
+data_sf <- separate(data_sf, Centroid_Coordinates, c("x","y"), sep = ",", remove = TRUE)
+
+
+data_sf <- data_sf %>% 
+  mutate(x=str_remove(x,"^..")) %>% 
+  mutate(y=str_remove(y,".$"))
+
+
+data_sf$ACRES <- as.numeric(data_sf$ACRES)
+data_sf$Land_Bank <- as.character(data_sf$Land_Bank)
+data_sf$Land_Bank <- as.factor(data_sf$Land_Bank)
+data_sf$amount_owed <- as.numeric(data_sf$amount_owed)
+data_sf$years_delinquent <- as.integer(data_sf$years_delinquent)
+data_sf$Distance_To_Key_Properties <- as.numeric(data_sf$Distance_To_Key_Properties)
+
+
+
+data_sf <- data_sf %>% 
+  filter(amount_owed>0) %>% 
+  filter(years_delinquent>2) #Correcting for covid: taking out years delinquent that's less than 2: 
+
+#downsampling 
+
+stack_recipe <- recipe(Land_Bank~ ., data = data_sf) %>% 
+    step_downsample(Land_Bank)
+
+stack_prep <- prep(stack_recipe)
+
+stack_down <- bake(stack_prep, new_data = NULL)
+
+stack_down %>%
+    count(Land_Bank)
+
+
+```
+
+
+```{r}
+
+data_sf <- stack_down #using downsampled data
+
+
+# create 'sf' object
+data_sf = sf::st_as_sf(data_sf, coords = c("x", "y"), crs = 4326)
+
+task = as_task_classif_st(data_sf, id = "Lawrence_Spatial_Task", target = "Land_Bank", positive = "1" )
+
+learner = lrn("classif.randomForest", predict_type = "prob")
+resampling_sp = rsmp("repeated_spcv_coords", folds = 4, repeats = 2)
+rr_sp = mlr3::resample(
+  task = task, learner = learner,
+  resampling = resampling_sp)
+
+#What's the accuracy and classification error? 
+
+
+rr_sp$aggregate(measures = msr("classif.ce"))
+rr_sp$aggregate(measures = msr("classif.acc"))
+```
+
+
+
+```{r}
+#Get a confusion matrix of a split. 
+
+# split into training and test
+splits = partition(task, ratio = 0.8)
+print(str(splits))
+pred = learner$train(task, splits$train)$predict(task, splits$test)
+pred$confusion
+```
+
+
+```{r}
 #Feature importance
 
 instance = fselect(
@@ -741,26 +1050,40 @@ instance = fselect(
   batch_size = 5
 )
 ```
-
+looking at phi based on this code: https://mlr3book.mlr-org.com/interpretation.html
 ```{r}
 library(iml)
 
 
-test <- data_sf %>% 
+Lawrence_data_no_geometry <- data_sf %>% 
   st_drop_geometry() 
   
 
 x = data_sf[which(names(data_sf) != "Land_Bank")]
-model = Predictor$new(learner, data = test, y = "Land_Bank")
-x.interest = data.frame(test[1, ])
+model = Predictor$new(learner, data = Lawrence_data_no_geometry, y = "Land_Bank")
+x.interest = data.frame(Lawrence_data_no_geometry[1, ])
 shapley = Shapley$new(model, x.interest = x.interest)
 plot(shapley)
 
 
 ```
 
+#Looking at the decision tree 
 
 
+```{r}
+library(rpart)
+library(rpart.plot)
+
+binary.model <- rpart(learner$model, data = data_sf)
+rpart.plot(binary.model, cex=.7, digits = 4)
 
 
+```
+
+How can we articulate this? 
+
+```{r}
+rpart.rules(binary.model)
+```
 
